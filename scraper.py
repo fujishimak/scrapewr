@@ -1,8 +1,10 @@
+from pprint import pprint
 from bs4 import BeautifulSoup
 from shutil import copyfile
 import requests
 import configparser
 from urllib.parse import urlparse
+import tldextract
 
 url = "https://wrblogs.samnabi.com/"
 
@@ -31,7 +33,7 @@ else:
 
 	#print(filtered_links)
 
-	
+
 #Backup the config file to preserve its structure
 copyfile("data_articles.ini","data_articles.ini.bak")
 
@@ -49,14 +51,25 @@ article_config = configparser.ConfigParser()
 article_config.read('data_articles.ini')
 
 #Compare Sam's links to the existing ini. For any links not found, set up for writeback
-for i in filtered_links:
-	if i not in article_config:# This definitely isn't accurate since it seems searching is done on config sections only
-		o = urlparse(i)
-		sectionname = o.hostname.replace(".com", "") #what if it's not .com...probably better to use a regex for this
-		sectionscheme = o.scheme
-		sectionfqdn = o.netloc
-		shortlink = sectionscheme + "://" + sectionfqdn
-		article_config[sectionname] = {'link': shortlink, 'feed': i }
+
+existing_links = [section.get('feed') for section in article_config.values()
+				  if 'feed' in section] # skip the default section
+
+filtered_set = set(filtered_links)
+existing_set = set(existing_links)
+missing_links = sorted(filtered_set - (filtered_set & existing_set))
+
+print('- MISSING LINKS - \n\n')
+pprint(missing_links)
+
+for link in missing_links:
+	o = urlparse(link)
+	ext = tldextract.extract(o.hostname)
+	sectionname = ext.domain
+	sectionscheme = o.scheme
+	sectionfqdn = o.netloc
+	shortlink = sectionscheme + "://" + sectionfqdn
+	article_config[sectionname] = {'link': shortlink, 'feed': link }
 
 #Open the ini file and write the results
 with open('new_articles.ini', 'w+') as f:
@@ -65,7 +78,6 @@ with open('new_articles.ini', 'w+') as f:
 #Verify that what we expect is happening...
 new_articles = configparser.ConfigParser()
 new_articles.read('new_articles.ini')
-print(new_articles.sections())
 
-
-
+print('\n\n - NEW ARTICLES INI - \n\n')
+pprint(sorted(new_articles.sections()))
